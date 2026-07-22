@@ -70,4 +70,42 @@ The app uses [Drizzle ORM](https://orm.drizzle.team/) with the `postgres` (postg
 3. Write a matching `migrations/<tag>.down.sql` alongside it, reversing the up migration. Drizzle Kit only generates "up" SQL, so a hand-written down file is what makes `npm run db:migrate:down` able to roll it back.
 4. Run `npm run db:migrate:up` to apply it.
 
-The `schema_migration_check` table in the schema/migrations is a placeholder proving the generate/apply/rollback pipeline works end to end — replace it with real tables as features (e.g. OAuth) are built.
+## Authentication (Sign in with Battle.net)
+
+Battle.net login is the app's sole authentication mechanism — there is no email/password flow. Signing in also creates (or matches) the local user record.
+
+### Flow
+
+1. `GET /api/auth/battlenet` — redirects to Battle.net's OAuth consent screen (Authorization Code flow, scopes `openid wow.profile`).
+2. `GET /api/auth/battlenet/callback` — Battle.net redirects here with a `code`. The server exchanges it for an access + refresh token, upserts the `users` row (matched by Battle.net account id), encrypts and stores the refresh token in `battlenet_tokens`, and sets a signed JWT session cookie.
+3. Subsequent requests to endpoints behind `requireAuth` (see [RequireAuth.middleware.ts](app/middleware/RequireAuth.middleware.ts)) are authenticated via that cookie — no further contact with Battle.net is needed just to establish who's calling.
+4. `POST /api/auth/logout` — clears the session cookie.
+
+### Token refresh
+
+- **Per-user (Profile API):** [BattleNetProfileClient](app/http/BattleNetProfileClient.ts) attaches a valid user access token to every request, transparently refreshing it (via the stored, encrypted refresh token) when expired, and retrying once on a `401`. If the refresh token itself is no longer valid, the user's `needs_reauth` flag is set — future features (e.g. a background aggregation job) should check this before calling the Profile API on that user's behalf, and the frontend should prompt a fresh login when it's set.
+- **App-level (Game Data API):** [BattleNetGameDataClient](app/http/BattleNetGameDataClient.ts) attaches a shared, in-memory-cached client-credentials token, refreshed automatically before expiry.
+
+No call site should manage Battle.net tokens manually — always go through one of these two clients.
+
+### Required environment variables
+
+In addition to the Postgres variables above, set:
+
+| Variable                 | Description                                                                                                                                                                 |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BNET_CLIENT_ID`         | Battle.net OAuth client id (from the Battle.net developer portal)                                                                                                           |
+| `BNET_CLIENT_SECRET`     | Battle.net OAuth client secret                                                                                                                                              |
+| `BNET_REGION`            | `us` \| `eu` \| `kr` \| `tw` — selects the OAuth/API base URLs                                                                                                              |
+| `BNET_REDIRECT_URI`      | Callback URL registered with Battle.net, e.g. `http://localhost:3000/api/auth/battlenet/callback`                                                                           |
+| `SESSION_JWT_SECRET`     | Signing secret for session JWTs (min 32 characters)                                                                                                                         |
+| `SESSION_JWT_EXPIRES_IN` | Session JWT lifetime, e.g. `7d`                                                                                                                                             |
+| `TOKEN_ENCRYPTION_KEY`   | 64-character hex string (32 bytes) used for AES-256-GCM refresh-token encryption — generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+
+### Manual prerequisite
+
+Register the app in the [Battle.net developer portal](https://develop.battle.net/) to obtain `BNET_CLIENT_ID` / `BNET_CLIENT_SECRET`, and register `BNET_REDIRECT_URI` there. This is required before end-to-end testing but doesn't block writing or reviewing code.
+
+## Database schema note
+
+The `schema_migration_check` placeholder table (from the initial Postgres setup) has been dropped — real tables (`users`, `battlenet_tokens`) now live in `app/database/schema/index.ts`.

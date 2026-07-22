@@ -1,0 +1,1 @@
+DROP TABLE "schema_migration_check" CASCADE;
