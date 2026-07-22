@@ -8,6 +8,20 @@
       "when": 1784735939158,
       "tag": "0000_ambiguous_mad_thinker",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784744115330,
+      "tag": "0001_add_users_and_battlenet_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784744128314,
+      "tag": "0002_drop_schema_migration_check",
+      "breakpoints": true
     }
   ]
 }
