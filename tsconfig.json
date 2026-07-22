@@ -13,6 +13,12 @@
     "resolveJsonModule": true,
     "sourceMap": true
   },
-  "include": ["server.ts", "app/**/*.ts", "tests/**/*.ts"],
+  "include": [
+    "server.ts",
+    "app/**/*.ts",
+    "tests/**/*.ts",
+    "scripts/**/*.ts",
+    "drizzle.config.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }
