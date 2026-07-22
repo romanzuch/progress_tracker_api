@@ -22,6 +22,13 @@
       "when": 1784744128314,
       "tag": "0002_drop_schema_migration_check",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784746842069,
+      "tag": "0003_burly_vanisher",
+      "breakpoints": true
     }
   ]
 }

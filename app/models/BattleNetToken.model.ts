@@ -7,8 +7,8 @@ export interface BattleNetTokenRecord {
   userId: string;
   accessToken: string;
   accessTokenExpiresAt: Date;
-  refreshTokenEncrypted: string;
-  refreshTokenIv: string;
+  refreshTokenEncrypted: string | null;
+  refreshTokenIv: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -16,8 +16,8 @@ export interface BattleNetTokenRecord {
 export interface BattleNetTokenInput {
   accessToken: string;
   accessTokenExpiresAt: Date;
-  refreshTokenEncrypted: string;
-  refreshTokenIv: string;
+  refreshTokenEncrypted?: string | null;
+  refreshTokenIv?: string | null;
 }
 
 export const BattleNetTokenModel = {
@@ -35,12 +35,24 @@ export const BattleNetTokenModel = {
     userId: string,
     data: BattleNetTokenInput,
   ): Promise<BattleNetTokenRecord> {
+    const values = {
+      userId,
+      accessToken: data.accessToken,
+      accessTokenExpiresAt: data.accessTokenExpiresAt,
+      ...(data.refreshTokenEncrypted !== undefined
+        ? {
+            refreshTokenEncrypted: data.refreshTokenEncrypted,
+            refreshTokenIv: data.refreshTokenIv,
+          }
+        : {}),
+    };
+
     const [record] = await getDb()
       .insert(battlenetTokens)
-      .values({ userId, ...data })
+      .values(values)
       .onConflictDoUpdate({
         target: battlenetTokens.userId,
-        set: { ...data, updatedAt: new Date() },
+        set: { ...values, updatedAt: new Date() },
       })
       .returning();
     return record;

@@ -2,11 +2,22 @@
 
 ## Status
 
-Draft
+Implemented (see "Post-implementation note" below for one deviation discovered during end-to-end testing).
 
 ## Summary
 
 Add Battle.net as the sole login mechanism for the WoW progress tracker, and give the backend authenticated access to both Battle.net APIs it needs: the per-user Profile API (Authorization Code flow) and the app-level Game Data API (Client Credentials flow). This is foundational infrastructure — no character/progress data fetching is included; this ticket only lands the OAuth plumbing, user identity, token storage/refresh, and the Axios clients that future tickets will call into.
+
+## Post-implementation note: Battle.net does not issue a refresh token on the Authorization Code grant
+
+During end-to-end testing, `exchangeCodeForToken`'s real response had no `refresh_token` field, crashing `encrypt(undefined)`. Confirmed against Battle.net's OAuth documentation: **the Authorization Code flow only returns an access token (~24h lifetime) — it does not support refresh tokens.** Refresh tokens (and the `refresh_token` grant) are not part of Battle.net's OAuth implementation for this flow at all; the Client Credentials flow (§6, app-level) was never expected to have one either.
+
+This invalidates the PRD's original assumption in Goals/§1/§7 that a Battle.net refresh token would always be available to store and to transparently refresh with. The implementation was adjusted:
+
+- `refresh_token` is now optional on `BattleNetTokenResponse`; `battlenet_tokens.refresh_token_encrypted` / `refresh_token_iv` are nullable columns (migration `0003_burly_vanisher`).
+- The refresh token is encrypted and stored only if Battle.net ever sends one (it currently doesn't, for the user flow — this is defensive in case that changes).
+- When a user's Battle.net access token expires and no refresh token is on file, `users.needs_reauth` is set to `true` and the caller gets an explicit "must re-authenticate" error, instead of silently refreshing.
+- **Practical effect:** per-user Profile API access is only good for ~24h after login, then requires a fresh Battle.net login (full redirect through `/api/auth/battlenet` again) — there is no silent, refresh-token-based renewal for the user flow. The planned background aggregation job (see Dependencies / Follow-ups) will need to tolerate `needs_reauth` becoming true roughly daily for any user it hasn't re-authenticated, rather than treating it as a rare revoked-token edge case.
 
 ## Background / Context
 
@@ -31,8 +42,8 @@ Config in this repo follows a `*.keys.ts` (raw env access) → `*.conf.ts` (zod-
 
 - A user can sign in with Battle.net; a local user record is created on first login and matched on return visits.
 - After login, the API issues its own JWT session cookie so the frontend never re-hits Battle.net for subsequent requests.
-- The Battle.net refresh token is stored encrypted at rest, tied to the user record.
-- Expired Battle.net user access tokens are refreshed transparently using the stored refresh token.
+- The Battle.net refresh token is stored encrypted at rest, tied to the user record, if/when Battle.net issues one.
+- Expired Battle.net user access tokens are refreshed transparently using the stored refresh token when one is available; otherwise `needs_reauth` is set and the user must log in again (see Post-implementation note — Battle.net's Authorization Code flow does not currently issue refresh tokens, so this is the common case, not a fallback for rare failures).
 - The app obtains and caches a client-credentials token for Game Data API calls, refreshed automatically before expiry.
 - Two dedicated Axios clients (Profile API, Game Data API) attach valid tokens automatically via interceptors and retry once on a 401 after a refresh.
 - All secrets (client id/secret, session signing secret, encryption key) come from env config, never hardcoded.
@@ -63,8 +74,8 @@ New Drizzle schema (in `app/database/schema/`, alongside the existing placeholde
   - `id` (PK)
   - `user_id` (FK → `users.id`, unique — one Battle.net token set per user)
   - `access_token` (short-lived; can be stored plaintext or just not persisted — see Open Questions)
-  - `refresh_token_encrypted` (bytea/text — AES-256-GCM ciphertext)
-  - `refresh_token_iv` (bytea/text — GCM nonce, stored alongside ciphertext)
+  - `refresh_token_encrypted` (text, nullable — AES-256-GCM ciphertext; null when Battle.net didn't issue one, which is currently always, for the Authorization Code grant — see Post-implementation note)
+  - `refresh_token_iv` (text, nullable — GCM nonce, stored alongside ciphertext)
   - `access_token_expires_at`
   - `created_at`, `updated_at`
 
@@ -147,8 +158,8 @@ Add to `.env.example` (and document in README): `BNET_CLIENT_ID`, `BNET_CLIENT_S
 - [ ] A new user can sign in with Battle.net and a local `users` record is created on first login.
 - [ ] A returning user signing in with Battle.net is matched to their existing `users` record (by `battlenet_id`), not duplicated.
 - [ ] After a successful login, the API sets a signed JWT session cookie; subsequent requests are authenticated via `RequireAuth` middleware without contacting Battle.net.
-- [ ] The Battle.net refresh token is stored AES-256-GCM-encrypted in `battlenet_tokens`, tied to the user record — never stored or logged in plaintext.
-- [ ] Expired Battle.net user access tokens are refreshed automatically (via the Profile client's request/response interceptors) with no user-facing interruption.
+- [x] The Battle.net refresh token, when Battle.net issues one, is stored AES-256-GCM-encrypted in `battlenet_tokens`, tied to the user record — never stored or logged in plaintext. (In practice Battle.net's Authorization Code flow issues no refresh token at all — see Post-implementation note.)
+- [x] Expired Battle.net user access tokens are refreshed automatically (via the Profile client's request/response interceptors) when a refresh token is on file; otherwise `needs_reauth` is set and the request fails with a clear "must re-authenticate" error rather than crashing.
 - [ ] The app obtains and caches a client-credentials token for Game Data API calls, shared across requests (not refetched per call).
 - [ ] The app-level token is refreshed automatically before expiry (checked lazily on each `getAppToken()` call).
 - [ ] Both the Profile client and Game Data client attach tokens automatically and retry once on a 401 — no call site manages tokens manually.
@@ -158,7 +169,7 @@ Add to `.env.example` (and document in README): `BNET_CLIENT_ID`, `BNET_CLIENT_S
 
 ## Open Questions
 
-- Should the Profile API's user access token be persisted in `battlenet_tokens` at all, or only the refresh token (re-deriving the access token via refresh on every use)? Storing it avoids an extra round-trip when it's still valid; not storing it is simpler and reduces the plaintext-secret surface. Leaning toward storing it (plaintext is fine — it's short-lived, ~24h) alongside its expiry, to avoid refreshing on every single call.
+- ~~Should the Profile API's user access token be persisted in `battlenet_tokens` at all, or only the refresh token (re-deriving the access token via refresh on every use)?~~ Resolved by the Post-implementation note: there's often no refresh token to fall back on, so the access token must be persisted and reused until its own ~24h expiry.
 - What scopes does the Profile API require beyond `wow.profile` — is `openid` needed for a userinfo endpoint to get the BattleTag/account id, or does the token exchange response already include enough identity info?
 - Redirect target after callback: is there a frontend URL/route to redirect to yet, or should the callback just return JSON for now (frontend doesn't exist in this repo)?
 - `SESSION_JWT_EXPIRES_IN` vs. Battle.net refresh token lifetime — should our session outlive Battle.net's refresh token, or should session expiry be tied to it?

@@ -54,15 +54,17 @@ export const AuthController = {
       battletag: userInfo.battletag,
     });
 
-    const { ciphertext, iv } = encrypt(tokenResponse.refresh_token);
+    const encrypted = tokenResponse.refresh_token
+      ? encrypt(tokenResponse.refresh_token)
+      : undefined;
 
     await BattleNetTokenModel.upsert(user.id, {
       accessToken: tokenResponse.access_token,
       accessTokenExpiresAt: new Date(
         Date.now() + tokenResponse.expires_in * 1000,
       ),
-      refreshTokenEncrypted: ciphertext,
-      refreshTokenIv: iv,
+      refreshTokenEncrypted: encrypted?.ciphertext ?? null,
+      refreshTokenIv: encrypted?.iv ?? null,
     });
 
     const sessionToken = signSession(user.id);

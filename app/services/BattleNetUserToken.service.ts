@@ -12,15 +12,17 @@ async function refreshAndPersist(
 ): Promise<string> {
   try {
     const tokenResponse = await refreshUserToken(refreshToken);
-    const { ciphertext, iv } = encrypt(tokenResponse.refresh_token);
+    const encrypted = tokenResponse.refresh_token
+      ? encrypt(tokenResponse.refresh_token)
+      : undefined;
 
     await BattleNetTokenModel.upsert(userId, {
       accessToken: tokenResponse.access_token,
       accessTokenExpiresAt: new Date(
         Date.now() + tokenResponse.expires_in * 1000,
       ),
-      refreshTokenEncrypted: ciphertext,
-      refreshTokenIv: iv,
+      refreshTokenEncrypted: encrypted?.ciphertext ?? null,
+      refreshTokenIv: encrypted?.iv ?? null,
     });
 
     return tokenResponse.access_token;
@@ -46,6 +48,13 @@ export async function getValidAccessToken(userId: string): Promise<string> {
     return record.accessToken;
   }
 
+  if (!record.refreshTokenEncrypted || !record.refreshTokenIv) {
+    await UserModel.setNeedsReauth(userId, true);
+    throw new Error(
+      `Battle.net access token expired for user ${userId} and no refresh token is available; user must re-authenticate`,
+    );
+  }
+
   const refreshToken = decrypt({
     ciphertext: record.refreshTokenEncrypted,
     iv: record.refreshTokenIv,
@@ -58,6 +67,13 @@ export async function forceRefreshAccessToken(userId: string): Promise<string> {
   const record = await BattleNetTokenModel.findByUserId(userId);
   if (!record) {
     throw new Error(`No Battle.net token stored for user ${userId}`);
+  }
+
+  if (!record.refreshTokenEncrypted || !record.refreshTokenIv) {
+    await UserModel.setNeedsReauth(userId, true);
+    throw new Error(
+      `No refresh token available for user ${userId}; user must re-authenticate`,
+    );
   }
 
   const refreshToken = decrypt({
