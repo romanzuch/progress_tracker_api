@@ -26,3 +26,4 @@ export const battlenetConfig = parsed.data;
 
 export const battlenetOauthBaseUrl = `https://${battlenetConfig.region}.battle.net/oauth`;
 export const battlenetApiBaseUrl = `https://${battlenetConfig.region}.api.blizzard.com`;
+export const battlenetProfileNamespace = `profile-${battlenetConfig.region}`;
