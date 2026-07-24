@@ -106,6 +106,15 @@ In addition to the Postgres variables above, set:
 
 Register the app in the [Battle.net developer portal](https://develop.battle.net/) to obtain `BNET_CLIENT_ID` / `BNET_CLIENT_SECRET`, and register `BNET_REDIRECT_URI` there. This is required before end-to-end testing but doesn't block writing or reviewing code.
 
+## WoW Profile Summary
+
+`GET /api/profile/wow` — behind `requireAuth`; returns the caller's Battle.net WoW Account Profile Summary (`id` + `wow_accounts[]`, each with its `characters[]`) unmodified.
+
+- **`locale`** (optional query param): one of Battle.net's supported locales (`en_US`, `en_GB`, `de_DE`, `es_ES`, `fr_FR`, `it_IT`, `pl_PL`, `pt_PT`, `ru_RU`, `ko_KR`, `zh_TW`, `zh_CN`, `es_MX`, `pt_BR`). Defaults to `en_US`; an unsupported value returns `400` before any Battle.net call is made.
+- **Region/namespace:** the `namespace` sent to Battle.net (`profile-{BNET_REGION}`) is always derived from the same `BNET_REGION` config used for the API base URL — never hardcoded.
+- **Auth failures:** if the stored Battle.net token can't be refreshed (`needs_reauth`), the endpoint returns `401 { "error": "needs_reauth" }` instead of a generic `500`, so the frontend can prompt a fresh login.
+- No data from this endpoint is persisted — it's a live proxy to Battle.net's Profile API via [BattleNetProfileClient](app/http/BattleNetProfileClient.ts).
+
 ## Database schema note
 
 The `schema_migration_check` placeholder table (from the initial Postgres setup) has been dropped — real tables (`users`, `battlenet_tokens`) now live in `app/database/schema/index.ts`.
