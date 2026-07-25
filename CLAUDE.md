@@ -1,6 +1,30 @@
 # CLAUDE.md
 
-Guidance for working in this repository. See [PRD.md](PRD.md) for product goals/roadmap and [plans/prds/](plans/prds/) for per-feature specs.
+Guidance for working in this repository. See [PRD.md](PRD.md) for product goals/roadmap, [docs/plans/prds/](docs/plans/prds/) for per-feature specs, and [docs/](docs/) for architecture/request-flow diagrams.
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Dev server with hot reload (`tsx watch server.ts`) |
+| `npm run build` | Typecheck + compile to `dist/` |
+| `npm start` | Run the compiled server from `dist/` |
+| `npm test` | Run the full Vitest suite |
+| `npx vitest run tests/Xxx.test.ts` | Run a single test file |
+| `npx vitest run -t "test name"` | Run tests matching a name pattern |
+| `npm run lint` | ESLint over the repo |
+| `npm run format` | Prettier write |
+| `npm run db:up` / `npm run db:down` | Start/stop local Postgres (docker-compose) |
+| `npm run db:migrate:generate` | Generate a migration from schema changes |
+| `npm run db:migrate:up` / `npm run db:migrate:down` | Apply / roll back migrations — see README for the required hand-written `.down.sql` convention |
+
+The server requires a reachable Postgres instance at startup (`server.ts` calls `connect()` before `listen`) — run `npm run db:up` and apply migrations first.
+
+## Architecture
+
+Request flow: `server.ts` → `createApp()` (`app/config/app.conf.ts`, mounts everything under `/api`) → `app/routes` → middleware (`requireAuth`, etc.) → `app/controllers` → `app/services`/`app/models` → `app/http` clients → Battle.net/Postgres. See [docs/architecture-overview.md](docs/architecture-overview.md) for the diagram and `docs/flows/` for per-flow Mermaid diagrams (login, profile request, token refresh decision tree).
+
+`app/database/Mongo.database.ts` and `Redis.database.ts` are unused `export {}` stubs left over from repo scaffolding — Postgres (`app/database/Postgres.database.ts`) is the only active database. Likewise `src/` (`css/`, `javascript/`) is an empty scaffold placeholder, not used by this API.
 
 ## Stack
 
@@ -36,7 +60,7 @@ Guidance for working in this repository. See [PRD.md](PRD.md) for product goals/
 
 This project follows a PRD-first, Linear-ticket-driven flow:
 
-1. **PRD first.** Before implementing a non-trivial feature, write (or ask for) a PRD under `plans/prds/<kebab-slug>.md`. Clear up ambiguities with the user (ask, don't assume) before writing it. A PRD includes: Status, Summary, Background/Context, Decisions made for this ticket, Goals, Non-Goals, Proposed Solution, Acceptance Criteria, Open Questions, Dependencies/Follow-ups.
+1. **PRD first.** Before implementing a non-trivial feature, write (or ask for) a PRD under `docs/plans/prds/<kebab-slug>.md`. Clear up ambiguities with the user (ask, don't assume) before writing it. A PRD includes: Status, Summary, Background/Context, Decisions made for this ticket, Goals, Non-Goals, Proposed Solution, Acceptance Criteria, Open Questions, Dependencies/Follow-ups.
 2. **Linear ticket.** Create the corresponding Linear ticket in the "World of Warcraft Character Progress Tracker" project (team `codebox`, prefix `CB-`), matching the structure of existing tickets (Problem/Context, Goal, Scope, Dependencies, Out of Scope, Acceptance Criteria, Notes) and linking back to the PRD file. Confirm the drafted ticket content with the user before creating it (it's visible to the whole team).
 3. **Branch naming.** Use the exact branch name Linear provides for the ticket: `romanzuchowski/cb-<n>-<kebab-title>`.
 4. **Before committing:** run `npm run build` (typecheck), `npx eslint <changed files>`, and `npm test` — all three must pass. Update the README when the ticket's acceptance criteria call for it.
