@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { createApp } from './app/config/app.conf.js';
 import { connect } from './app/database/index.js';
+import { startSnapshotScheduler } from './app/services/SnapshotScheduler.service.js';
 import { logger } from './app/utils/Logger.util.js';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -12,6 +13,8 @@ async function main(): Promise<void> {
   app.listen(port, () => {
     logger.info(`Server listening on port ${port}`);
   });
+
+  startSnapshotScheduler();
 }
 
 main().catch((err) => {
