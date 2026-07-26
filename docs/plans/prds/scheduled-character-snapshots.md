@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned — not yet implemented. Ticket: [CB-90](https://linear.app/romanzu/issue/CB-90/snapshot-tracked-characters-on-a-schedule).
+Implemented — see Post-implementation notes. Ticket: [CB-90](https://linear.app/romanzu/issue/CB-90/snapshot-tracked-characters-on-a-schedule).
 
 ## Summary
 
@@ -28,9 +28,9 @@ A background job built on per-user tokens would inherit this directly: it could 
 
 Confirmed a second time with a raw `curl` against `https://eu.api.blizzard.com/profile/wow/character/dun-morogh/sixfootfour?namespace=profile-eu` using a token minted purely from the client id and secret — `200`, with no browser and no login anywhere in the flow.
 
-**A note on why this looks wrong at first.** Fetching that URL by hand naturally leads through Battle.net's login screen, which makes a user token seem mandatory. That is an artifact of the authorization-code flow being the only convenient way to mint a token manually (and the only one the dev portal's tooling walks you through) — not a requirement of the endpoint. Both grants produce an access token that is indistinguishable in an `Authorization: Bearer` header. The `wow.profile` scope governs a *user's* data and therefore only applies to `/profile/user/*`, where the account is identified by the token itself; a character endpoint names its subject in the URL, so there is no account to scope to. It needs *a* token, not the character owner's token.
+**A note on why this looks wrong at first.** Fetching that URL by hand naturally leads through Battle.net's login screen, which makes a user token seem mandatory. That is an artifact of the authorization-code flow being the only convenient way to mint a token manually (and the only one the dev portal's tooling walks you through) — not a requirement of the endpoint. Both grants produce an access token that is indistinguishable in an `Authorization: Bearer` header. The `wow.profile` scope governs a _user's_ data and therefore only applies to `/profile/user/*`, where the account is identified by the token itself; a character endpoint names its subject in the URL, so there is no account to scope to. It needs _a_ token, not the character owner's token.
 
-Worth stating explicitly, since it is the crux of the whole phase: the app token *also* expires after ~24 hours, exactly like the user token. The difference is not lifetime but renewability. Client Credentials has no refresh token **by design** — the app simply requests another token with its own client id and secret, with no user involvement, which `getAppToken()` already does 60 seconds ahead of expiry (and the client interceptors force-refresh on a 401 as a backstop). The 24h on the app token is a cache TTL; the 24h on the user token is a grant that only a human logging in can renew. That asymmetry, not the duration, is what makes unattended polling possible.
+Worth stating explicitly, since it is the crux of the whole phase: the app token _also_ expires after ~24 hours, exactly like the user token. The difference is not lifetime but renewability. Client Credentials has no refresh token **by design** — the app simply requests another token with its own client id and secret, with no user involvement, which `getAppToken()` already does 60 seconds ahead of expiry (and the client interceptors force-refresh on a 401 as a backstop). The 24h on the app token is a cache TTL; the 24h on the user token is a grant that only a human logging in can renew. That asymmetry, not the duration, is what makes unattended polling possible.
 
 ### Why polling is adaptive rather than fixed
 
@@ -121,12 +121,12 @@ Retention and downsampling policy for the accumulated snapshots is an open quest
 
 New `app/config/aggregation.keys.ts` (raw `process.env`) and `app/config/aggregation.conf.ts` (zod `safeParse`, `z.prettifyError` on failure at import time), following the repo's keys/conf split:
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `SNAPSHOT_JOB_ENABLED` | `false` | Whether `server.ts` starts the heartbeat at all |
-| `SNAPSHOT_JOB_HEARTBEAT_MINUTES` | `5` | How often to look for due characters |
-| `SNAPSHOT_ACTIVE_INTERVAL_MINUTES` | `30` | Interval after an observed change |
-| `SNAPSHOT_IDLE_INTERVAL_MINUTES` | `360` | Backoff ceiling for unchanging characters |
+| Variable                           | Default | Meaning                                         |
+| ---------------------------------- | ------- | ----------------------------------------------- |
+| `SNAPSHOT_JOB_ENABLED`             | `false` | Whether `server.ts` starts the heartbeat at all |
+| `SNAPSHOT_JOB_HEARTBEAT_MINUTES`   | `5`     | How often to look for due characters            |
+| `SNAPSHOT_ACTIVE_INTERVAL_MINUTES` | `30`    | Interval after an observed change               |
+| `SNAPSHOT_IDLE_INTERVAL_MINUTES`   | `360`   | Backoff ceiling for unchanging characters       |
 
 All defaulted, so `tests/setup.ts` needs no new entries and existing tests keep passing untouched. The conf module validates that active ≤ idle and that the heartbeat is ≤ the active interval, since a heartbeat longer than the active interval would silently cap the real resolution.
 
@@ -140,34 +140,34 @@ All defaulted, so `tests/setup.ts` needs no new entries and existing tests keep 
 
 **`tracked_characters` — two new columns:**
 
-| Column | Type | Notes |
-| --- | --- | --- |
-| `next_poll_at` | timestamp | not null, `defaultNow()` — new and existing rows are immediately due |
-| `poll_interval_minutes` | integer | not null, default `30` (the active cadence) |
+| Column                  | Type      | Notes                                                                |
+| ----------------------- | --------- | -------------------------------------------------------------------- |
+| `next_poll_at`          | timestamp | not null, `defaultNow()` — new and existing rows are immediately due |
+| `poll_interval_minutes` | integer   | not null, default `30` (the active cadence)                          |
 
 Index on `next_poll_at` to keep the due query cheap.
 
 **`character_snapshots` — new table**, following the existing `pgTable`/`uuid`/`timestamp` conventions:
 
-| Column | Type | Notes |
-| --- | --- | --- |
-| `id` | uuid PK | `defaultRandom()` |
-| `user_id` | uuid | FK → `users.id`, `onDelete: 'cascade'` |
-| `realm_slug` | text | not null |
-| `character_name` | text | not null, lowercase |
-| `captured_at` | timestamp | not null, `defaultNow()` |
-| `payload_hash` | text | not null — change-detection signal |
-| `level` | integer | nullable — absent fields tolerated |
-| `experience` | integer | nullable |
-| `achievement_points` | integer | nullable |
-| `achievements_completed` | integer | nullable |
-| `average_item_level` | integer | nullable |
-| `equipped_item_level` | integer | nullable |
-| `last_login_at` | timestamp | nullable |
-| `profile_payload` | jsonb | not null |
-| `achievements_payload` | jsonb | not null |
-| `equipment_payload` | jsonb | not null |
-| `created_at` | timestamp | not null, `defaultNow()` |
+| Column                   | Type      | Notes                                  |
+| ------------------------ | --------- | -------------------------------------- |
+| `id`                     | uuid PK   | `defaultRandom()`                      |
+| `user_id`                | uuid      | FK → `users.id`, `onDelete: 'cascade'` |
+| `realm_slug`             | text      | not null                               |
+| `character_name`         | text      | not null, lowercase                    |
+| `captured_at`            | timestamp | not null, `defaultNow()`               |
+| `payload_hash`           | text      | not null — change-detection signal     |
+| `level`                  | integer   | nullable — absent fields tolerated     |
+| `experience`             | integer   | nullable                               |
+| `achievement_points`     | integer   | nullable                               |
+| `achievements_completed` | integer   | nullable                               |
+| `average_item_level`     | integer   | nullable                               |
+| `equipped_item_level`    | integer   | nullable                               |
+| `last_login_at`          | timestamp | nullable                               |
+| `profile_payload`        | jsonb     | not null                               |
+| `achievements_payload`   | jsonb     | not null                               |
+| `equipment_payload`      | jsonb     | not null                               |
+| `created_at`             | timestamp | not null, `defaultNow()`               |
 
 Index on `(user_id, realm_slug, character_name, captured_at desc)` — serves both Phase 5's queries and this ticket's "fetch the previous hash" lookup.
 
@@ -189,6 +189,7 @@ nextPollInterval(currentIntervalMinutes, changed): number   // pure, exported fo
 `nextPollInterval` is the whole adaptive rule in one pure function: `changed ? activeInterval : Math.min(currentInterval * 2, idleInterval)`.
 
 `runDueSnapshots`:
+
 1. `TrackedCharacterModel.listDue(new Date())`; return a zeroed summary immediately if empty.
 2. For each due character, sequentially:
    - `Promise.all` the three endpoint calls,
@@ -229,30 +230,46 @@ Model-level behaviour unit tests can't reach with mocked modules (the `ON DELETE
 
 ## Acceptance Criteria
 
-- [ ] The heartbeat polls only characters whose `next_poll_at` is due, across all users, with no dependency on any user's session or `needs_reauth` state.
-- [ ] Snapshots continue to be collected for a user whose `needs_reauth` is `true` — provable by setting the flag manually and running the job.
-- [ ] Each successfully polled character produces exactly one `character_snapshots` row per poll, containing the extracted metrics, the payload hash, **and** all three raw Battle.net payloads.
-- [ ] A character whose payload hash changed is rescheduled at the active interval (30 min by default).
-- [ ] A character whose payload hash is unchanged has its interval doubled, capped at the idle floor (360 min by default).
-- [ ] Change detection is based on a hash of the raw payloads, not on the typed metric columns — so a max-level character with no XP or level movement is still detected as active when its gear or achievements change.
-- [ ] A newly tracked character is due immediately and starts at the active interval.
-- [ ] A character whose Battle.net fetch fails (404 or 5xx) is logged, counted as failed, **and still rescheduled** via the backoff path; every other character in the same run is still persisted.
-- [ ] An empty due list is a clean no-op — no Battle.net calls, no writes, no error.
-- [ ] An error thrown anywhere inside a scheduled run is caught at the scheduler boundary and does not crash the API process; the next heartbeat still fires.
-- [ ] A heartbeat that fires while the previous run is still in flight is skipped, not run concurrently.
-- [ ] With `SNAPSHOT_JOB_ENABLED=false` (the default), starting the server registers no timer and performs no polling — verifiable in the test suite.
-- [ ] Invalid config (active interval > idle interval, or heartbeat > active interval) fails at import time with a readable error.
-- [ ] `npm run job:snapshot` performs exactly one due-characters run against a live database and logs the `{ due, succeeded, failed }` summary.
-- [ ] Snapshot history for a character survives that character being untracked and re-tracked, and is removed when the owning user is deleted.
-- [ ] All Battle.net traffic goes through an `app/http/` client; no call site builds a Battle.net URL or handles a token directly.
-- [ ] `battleNetGameDataClient` and the new app profile client share one token/retry implementation rather than duplicating it.
-- [ ] Migration applies and its hand-written `.down.sql` rolls back cleanly.
-- [ ] `npm run build`, `npx eslint <changed files>`, and `npm test` all pass.
-- [ ] README documents the new env vars, the manual run command, the off-by-default behaviour, the adaptive cadence, and the single-instance caveat.
+- [x] The heartbeat polls only characters whose `next_poll_at` is due, across all users, with no dependency on any user's session or `needs_reauth` state.
+- [x] Snapshots continue to be collected for a user whose `needs_reauth` is `true` — provable by setting the flag manually and running the job.
+- [x] Each successfully polled character produces exactly one `character_snapshots` row per poll, containing the extracted metrics, the payload hash, **and** all three raw Battle.net payloads.
+- [x] A character whose payload hash changed is rescheduled at the active interval (30 min by default).
+- [x] A character whose payload hash is unchanged has its interval doubled, capped at the idle floor (360 min by default).
+- [x] Change detection is based on a hash of the raw payloads, not on the typed metric columns — so a max-level character with no XP or level movement is still detected as active when its gear or achievements change.
+- [x] A newly tracked character is due immediately and starts at the active interval.
+- [x] A character whose Battle.net fetch fails (404 or 5xx) is logged, counted as failed, **and still rescheduled** via the backoff path; every other character in the same run is still persisted.
+- [x] An empty due list is a clean no-op — no Battle.net calls, no writes, no error.
+- [x] An error thrown anywhere inside a scheduled run is caught at the scheduler boundary and does not crash the API process; the next heartbeat still fires.
+- [x] A heartbeat that fires while the previous run is still in flight is skipped, not run concurrently.
+- [x] With `SNAPSHOT_JOB_ENABLED=false` (the default), starting the server registers no timer and performs no polling — verifiable in the test suite.
+- [x] Invalid config (active interval > idle interval, or heartbeat > active interval) fails at import time with a readable error.
+- [x] `npm run job:snapshot` performs exactly one due-characters run against a live database and logs the `{ due, succeeded, failed }` summary.
+- [x] Snapshot history for a character survives that character being untracked and re-tracked, and is removed when the owning user is deleted. Untrack/re-track survival was exercised live; the user-delete cascade is the same `ON DELETE CASCADE` mechanism already proven for `battlenet_tokens`/`tracked_characters` and was verified via the migration rather than by deleting the shared dev database's only user — see Post-implementation notes.
+- [x] All Battle.net traffic goes through an `app/http/` client; no call site builds a Battle.net URL or handles a token directly.
+- [x] `battleNetGameDataClient` and the new app profile client share one token/retry implementation rather than duplicating it.
+- [x] Migration applies and its hand-written `.down.sql` rolls back cleanly.
+- [x] `npm run build`, `npx eslint <changed files>`, and `npm test` all pass.
+- [x] README documents the new env vars, the manual run command, the off-by-default behaviour, the adaptive cadence, and the single-instance caveat.
+
+## Post-implementation notes
+
+Facts the plan didn't pin down, or that changed once real code and a live database were involved:
+
+- **`sha256Json` lives in `app/utils/Hash.util.ts`**, not inside `CharacterSnapshot.service.ts`. Pulling it out as a standalone, pure helper lets the test suite compute the expected hash independently of the service under test, rather than needing to mock or duplicate the hashing logic.
+- **The shared app-token factory is `app/http/BattleNetAppTokenClient.ts`**, exporting `createAppTokenClient()` — the plan sketched this as a function but hadn't named its file. `BattleNetGameDataClient.ts` was rewritten to `export const battleNetGameDataClient = createAppTokenClient();` with no other change, and `BattleNetAppProfileClient.ts` uses the same factory.
+- **`startSnapshotScheduler()` returns the `NodeJS.Timeout` (or `undefined` when the job is disabled)** rather than being a fire-and-forget void function. `server.ts` doesn't currently use the return value, but `SnapshotScheduler.service.test.ts` does — each test captures it and `clearInterval`s it in `afterEach`, so a failed assertion mid-test can't leave a live timer running into the next test.
+- **Metric extraction reads `average_item_level`, `equipped_item_level`, and `last_login_timestamp` from the profile payload**, not the equipment payload. The equipment payload only contains per-slot item data; Battle.net's character-profile-summary endpoint already aggregates item level and last-login into top-level fields, so `extractMetrics()` in `CharacterSnapshot.service.ts` reads all of `level`/`experience`/`achievement_points`/`average_item_level`/`equipped_item_level`/`last_login_timestamp` off `profile`, and only `achievements_completed` (`total_quantity`) off the achievements payload.
+- **`tracked_characters.poll_interval_minutes`'s column default is the literal integer `30`**, duplicating `SNAPSHOT_ACTIVE_INTERVAL_MINUTES`'s default rather than reading it. A Postgres column default has to be a constant baked into the migration at generation time — it cannot reference application config — so the two `30`s are two independent sources of truth that happen to agree today. If `SNAPSHOT_ACTIVE_INTERVAL_MINUTES` is ever changed, this column default needs a matching migration or newly-tracked rows will start one poll interval out of step with the active cadence until their first successful poll corrects it.
+- **The `table.capturedAt.desc()` index method needed no fallback.** Task 3's plan anticipated it might not typecheck against the installed Drizzle version and pre-authorized dropping to a plain ascending index (a btree scans backward equally well) if so. It typechecked fine on the first attempt, so the index was built exactly as specified in Proposed Solution; no deviation to record beyond noting the contingency wasn't needed.
+- **The cascade-on-user-delete half of the "history survives untrack, is removed with the user" acceptance criterion was verified structurally, not by a live drill.** Task 7's end-to-end verification (see its report) deleted and re-created a `tracked_characters` row against the shared dev database to prove untrack survival, but deliberately did not delete the database's only `users` row to check the cascade, since that would have destroyed unrelated fixture data with no easy way back. The `character_snapshots_user_id_users_id_fk` constraint carries `ON DELETE CASCADE`, the identical mechanism already exercised for `battlenet_tokens` and `tracked_characters` in earlier phases, so this is a structural rather than an independently observed guarantee.
+- **The single-instance limitation is real and undocumented at the infrastructure level.** The in-flight guard in `SnapshotScheduler.service.ts` is a module-level `boolean`, which only prevents overlap within one process. Nothing in this ticket adds row-claiming (`SELECT … FOR UPDATE SKIP LOCKED`) or an advisory lock, so running the job enabled on more than one API instance will have every instance poll the same due characters independently each heartbeat. This was already flagged as a Non-Goal and remains open below; it is now also called out as a caveat in `README.md`.
 
 ## Open Questions
 
 - **Retention and granularity** — inherited from `PRD.md`, still open, and deliberately not answered here. Adaptive polling widens the range rather than fixing a number: a permanently idle character accrues ~1,460 rows a year, while a heavily played one approaches ~17,500, each row carrying three raw JSON payloads (equipment being the largest). Comfortable for one player's characters, uncomfortable at scale. The decision needs real payload sizes, which this ticket produces. Phase 5 should settle it.
+
+  Observed numbers from the local dev database after Task 7's live verification (`psql "$DATABASE_URL" -c "select pg_size_pretty(pg_total_relation_size('character_snapshots'));"` and companion `pg_column_size` queries): 2 rows, 328 kB total relation size (table + indexes + TOAST). Per row, the three raw payloads together run ~121 KB — `achievements_payload` alone accounts for ~113 KB of that (one character at level 84 with 618 achievements completed), against ~1.1 KB for `profile_payload` and ~7 KB for `equipment_payload`. Achievements dominates by roughly an order of magnitude over the other two combined, and it can only grow as a character earns more achievements over its lifetime — worth weighing specifically (e.g. only storing the achievement _count_ delta, not the full unlocked-list payload) when Phase 5 revisits retention, rather than treating the three payloads as equally-sized.
+
 - **Whether the idle floor should be lower than 6 hours.** With backoff in place, a lower floor is cheap in a way it wasn't under a fixed schedule — the cost only applies to characters that never change. Worth revisiting once there's data on how many tracked characters are actually dormant.
 - **Multi-instance deployment** — the in-flight guard is per-process. If the API is ever run as more than one instance with the job enabled, every due character gets polled once per instance. A Postgres advisory lock (or `SELECT … FOR UPDATE SKIP LOCKED` on the due query) is the obvious fix; not worth building before there is a second instance.
 
@@ -260,6 +277,6 @@ Model-level behaviour unit tests can't reach with mocked modules (the `ON DELETE
 
 - **Depends on:** [wow-character-tracking.md](wow-character-tracking.md) (the `tracked_characters` table this extends, and the three character endpoints' path/normalization conventions) and [battlenet-oauth-integration.md](battlenet-oauth-integration.md) (`users`, the app-token service, the `needs_reauth` constraint this ticket routes around).
 - **Blocks:** Phase 5 (historical progress storage & query) — `character_snapshots` is the table its endpoints will read, and its retention decision depends on data this job generates.
-- **Requires a `PRD.md` update on completion:** mark Phase 4 done, and **remove "gold" from the umbrella Goals** — Blizzard exposes no character gold through any API, so it is not a deferrable feature but an unachievable one, and leaving it in the roadmap implies otherwise.
+- **Requires a `PRD.md` update on completion (done):** mark Phase 4 done, and **remove "gold" from the umbrella Goals** — Blizzard exposes no character gold through any API, so it is not a deferrable feature but an unachievable one, and leaving it in the roadmap implies otherwise.
 - **Follow-up candidate:** completed-quest counts via `/profile/wow/character/{realm}/{name}/quests/completed`, which would need a fourth endpoint call per character and a new metric column. Deliberately excluded here to keep this ticket's payload set identical to Phase 3's.
-- **Follow-up candidate:** the ~24h user-token staleness still affects the *live* Phase 2/3 endpoints, which is now purely a frontend-facing concern (a "please log in again" signal) rather than a data-collection one. Worth its own ticket when the frontend project starts.
+- **Follow-up candidate:** the ~24h user-token staleness still affects the _live_ Phase 2/3 endpoints, which is now purely a frontend-facing concern (a "please log in again" signal) rather than a data-collection one. Worth its own ticket when the frontend project starts.

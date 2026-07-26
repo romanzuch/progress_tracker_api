@@ -149,6 +149,26 @@ A per-user, durable selection of which characters the future scheduled aggregati
 - Rows are deleted automatically when their user is (`ON DELETE CASCADE`).
 - Only the selection is stored — no character stat data (level/XP/achievements/equipment) is persisted anywhere.
 
+## Scheduled character snapshots
+
+A background job that polls every tracked character on an adaptive schedule and writes one `character_snapshots` row per poll, containing both the typed metrics (level, experience, achievement points, item level, last login) and all three raw Battle.net payloads (profile, achievements, equipment) as `jsonb`.
+
+- **Runs on the app-level client-credentials token**, not a user's session — see [BattleNetAppProfileClient](app/http/BattleNetAppProfileClient.ts). A character keeps getting snapshotted even after its owner's Battle.net session has expired and `needs_reauth` is set, unlike the live `/api/profile/*` endpoints above, which require a valid per-user token.
+- **Adaptive cadence, per character:** a character whose payload hash changed since its last poll is re-polled after `SNAPSHOT_ACTIVE_INTERVAL_MINUTES`; an unchanged one has its interval doubled, capped at `SNAPSHOT_IDLE_INTERVAL_MINUTES` (30 → 60 → 120 → 240 → 360 minutes by default). A newly tracked character is due immediately and starts at the active interval.
+- **Off by default.** Enabling the in-process heartbeat (`SNAPSHOT_JOB_ENABLED=true`) is a deploy step, not something dev servers or test runs do implicitly.
+
+| Variable                           | Default | Description                                   |
+| ---------------------------------- | ------- | --------------------------------------------- |
+| `SNAPSHOT_JOB_ENABLED`             | `false` | Start the in-process heartbeat on server boot |
+| `SNAPSHOT_JOB_HEARTBEAT_MINUTES`   | `5`     | How often to look for due characters          |
+| `SNAPSHOT_ACTIVE_INTERVAL_MINUTES` | `30`    | Re-poll interval after an observed change     |
+| `SNAPSHOT_IDLE_INTERVAL_MINUTES`   | `360`   | Backoff ceiling for unchanging characters     |
+
+- Config is validated at import time (`app/config/aggregation.conf.ts`) and requires `heartbeat <= active <= idle` — an invalid combination fails fast rather than silently capping the real polling resolution.
+- **`npm run job:snapshot`** runs one due-characters pass immediately and exits, regardless of `SNAPSHOT_JOB_ENABLED` — useful for local verification, or for driving the job from an external scheduler instead of the in-process heartbeat.
+- **Single-instance only:** the in-flight guard that stops a heartbeat tick from overlapping a slow run is per-process. Running more than one API instance with the job enabled has each instance poll the same due characters independently — there is no row-claiming or locking between instances.
+- No endpoint reads snapshots yet — history and trend queries are a later phase.
+
 ## Database schema note
 
 The `schema_migration_check` placeholder table (from the initial Postgres setup) has been dropped — real tables (`users`, `battlenet_tokens`, `tracked_characters`) now live in `app/database/schema/index.ts`.
