@@ -14,7 +14,8 @@
     "db:down": "docker compose down",
     "db:migrate:generate": "drizzle-kit generate",
     "db:migrate:up": "drizzle-kit migrate",
-    "db:migrate:down": "tsx scripts/db-migrate-down.ts"
+    "db:migrate:down": "tsx scripts/db-migrate-down.ts",
+    "job:snapshot": "tsx scripts/run-snapshot-job.ts"
   },
   "keywords": [],
   "author": "",

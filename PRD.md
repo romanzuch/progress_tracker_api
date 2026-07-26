@@ -2,11 +2,11 @@
 
 ## Status
 
-Living document — reflects current scope and roadmap as of 2026-07-23. Individual features are specced in their own PRDs under [plans/prds/](plans/prds/); this document is the umbrella product view.
+Living document — reflects current scope and roadmap as of 2026-07-26. Individual features are specced in their own PRDs under [plans/prds/](plans/prds/); this document is the umbrella product view.
 
 ## Summary
 
-An API that authenticates World of Warcraft players via Battle.net, periodically fetches their character data (level, quests, gold, items, equipment, etc.), and stores it over time so that progress can be queried and eventually visualized. This repository (`progress_tracker`) is the **API only** — no frontend/graphing UI is built or planned here; a separate, not-yet-started project will consume this API's endpoints to render graphs and dashboards.
+An API that authenticates World of Warcraft players via Battle.net, periodically fetches their character data (level, quests, items, equipment, etc.), and stores it over time so that progress can be queried and eventually visualized. This repository (`progress_tracker`) is the **API only** — no frontend/graphing UI is built or planned here; a separate, not-yet-started project will consume this API's endpoints to render graphs and dashboards.
 
 ## Problem / Vision
 
@@ -46,13 +46,13 @@ Phases below are ordered; each maps to (or will map to) its own Linear ticket an
 
 - Live (non-persisted) character-level detail: profile summary (level, XP, achievement points, spec, etc.), achievements, and equipment, via three new Battle.net Profile API endpoints scoped by realm + character name. Plus a persisted per-user "tracked characters" selection so the scheduled aggregation job (Phase 4) knows which characters to poll. ([wow-character-tracking.md](plans/prds/wow-character-tracking.md))
 
-### Phase 4 — Scheduled aggregation job (planned)
+### Phase 4 — Scheduled aggregation job (done)
 
-- A background job that periodically polls each authenticated user's *tracked* characters via the Profile API (independent of whether the user currently has a live session) and persists snapshots. Must tolerate `needs_reauth` becoming true for any user whose Battle.net access token has expired without a refresh token on file (see [battlenet-oauth-integration.md](plans/prds/battlenet-oauth-integration.md) Post-implementation note).
+- A background job that polls every tracked character on an adaptive cadence, using the app-level client-credentials token rather than the Profile API's per-user grant, so it is permanently immune to `needs_reauth` becoming true for any user (see [battlenet-oauth-integration.md](plans/prds/battlenet-oauth-integration.md) Post-implementation note). Persists a snapshot row — typed metrics plus the raw Battle.net payloads — per poll to a new `character_snapshots` table. ([CB-90](plans/prds/scheduled-character-snapshots.md))
 
 ### Phase 5 — Historical progress storage & query (planned)
 
-- Durable storage of per-character snapshots over time (level, quests, gold, items, etc.), plus API endpoints to query history/trends for a character — the data a future frontend would graph.
+- Durable storage of per-character snapshots over time (level, quests, items, etc.), plus API endpoints to query history/trends for a character — the data a future frontend would graph.
 
 ### Phase 6 — Multi-character / account-wide views (planned)
 
