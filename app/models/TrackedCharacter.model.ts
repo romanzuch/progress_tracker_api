@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, lte } from 'drizzle-orm';
 import { getDb } from '../database/index.js';
 import { trackedCharacters } from '../database/schema/index.js';
 
@@ -7,6 +7,8 @@ export interface TrackedCharacter {
   userId: string;
   realmSlug: string;
   characterName: string;
+  nextPollAt: Date;
+  pollIntervalMinutes: number;
   createdAt: Date;
 }
 
@@ -52,5 +54,24 @@ export const TrackedCharacterModel = {
       )
       .returning();
     return trackedCharacter;
+  },
+
+  // Every user's due characters in one query — the job is global, not per-user.
+  async listDue(now: Date): Promise<TrackedCharacter[]> {
+    return getDb()
+      .select()
+      .from(trackedCharacters)
+      .where(lte(trackedCharacters.nextPollAt, now))
+      .orderBy(trackedCharacters.nextPollAt);
+  },
+
+  async updateSchedule(
+    id: string,
+    schedule: { nextPollAt: Date; pollIntervalMinutes: number },
+  ): Promise<void> {
+    await getDb()
+      .update(trackedCharacters)
+      .set(schedule)
+      .where(eq(trackedCharacters.id, id));
   },
 };
