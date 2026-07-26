@@ -42,15 +42,19 @@ Phases below are ordered; each maps to (or will map to) its own Linear ticket an
 
 - First real data-fetching endpoint: `GET /api/profile/wow`, a live authenticated proxy to Battle.net's WoW Account Profile Summary, region/locale aware. No persistence yet. ([CB-88](plans/prds/wow-profile-summary.md))
 
-### Phase 3 — Scheduled aggregation job (next, planned)
+### Phase 3 — Character detail fetch & tracking selection (next, planned)
 
-- A background job that periodically polls each authenticated user's characters via the Profile API (independent of whether the user currently has a live session) and persists snapshots. Must tolerate `needs_reauth` becoming true for any user whose Battle.net access token has expired without a refresh token on file (see [battlenet-oauth-integration.md](plans/prds/battlenet-oauth-integration.md) Post-implementation note).
+- Live (non-persisted) character-level detail: profile summary (level, XP, achievement points, spec, etc.), achievements, and equipment, via three new Battle.net Profile API endpoints scoped by realm + character name. Plus a persisted per-user "tracked characters" selection so the scheduled aggregation job (Phase 4) knows which characters to poll. ([wow-character-tracking.md](plans/prds/wow-character-tracking.md))
 
-### Phase 4 — Historical progress storage & query (planned)
+### Phase 4 — Scheduled aggregation job (planned)
+
+- A background job that periodically polls each authenticated user's *tracked* characters via the Profile API (independent of whether the user currently has a live session) and persists snapshots. Must tolerate `needs_reauth` becoming true for any user whose Battle.net access token has expired without a refresh token on file (see [battlenet-oauth-integration.md](plans/prds/battlenet-oauth-integration.md) Post-implementation note).
+
+### Phase 5 — Historical progress storage & query (planned)
 
 - Durable storage of per-character snapshots over time (level, quests, gold, items, etc.), plus API endpoints to query history/trends for a character — the data a future frontend would graph.
 
-### Phase 5 — Multi-character / account-wide views (planned)
+### Phase 6 — Multi-character / account-wide views (planned)
 
 - Endpoints that aggregate across all of a user's characters and realms, not just a single character at a time.
 

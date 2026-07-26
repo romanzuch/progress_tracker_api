@@ -115,6 +115,40 @@ Register the app in the [Battle.net developer portal](https://develop.battle.net
 - **Auth failures:** if the stored Battle.net token can't be refreshed (`needs_reauth`), the endpoint returns `401 { "error": "needs_reauth" }` instead of a generic `500`, so the frontend can prompt a fresh login.
 - No data from this endpoint is persisted — it's a live proxy to Battle.net's Profile API via [BattleNetProfileClient](app/http/BattleNetProfileClient.ts).
 
+## WoW Character Detail
+
+Three live proxies to Battle.net's per-character Profile API endpoints, all behind `requireAuth`:
+
+| Endpoint                                                                | Returns                                                                    |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `GET /api/profile/wow/character/:realmSlug/:characterName`              | Character Profile Summary (level, experience, achievement points, spec, …) |
+| `GET /api/profile/wow/character/:realmSlug/:characterName/achievements` | Character Achievements Summary (totals earned/points)                      |
+| `GET /api/profile/wow/character/:realmSlug/:characterName/equipment`    | Character Equipment Summary (equipped items per slot)                      |
+
+- Responses are returned unmodified, exactly like `GET /api/profile/wow`.
+- **`locale`** (optional query param): same supported set and `en_US` default as `GET /api/profile/wow` — the enum is shared via [battlenet.locales.ts](app/config/battlenet.locales.ts).
+- **Casing:** `realmSlug` and `characterName` are lowercased before being sent to Battle.net, whose character endpoints only match lowercase values. This means names can be passed through verbatim from `GET /api/profile/wow` (which returns them capitalized).
+- **Auth failures:** `needs_reauth` is surfaced as `401 { "error": "needs_reauth" }`, same as `GET /api/profile/wow`.
+- **Not gated by the tracked list** — any realm/character-name pair can be fetched, so a character can be previewed before being tracked.
+- Nothing fetched here is persisted.
+
+## Tracked characters
+
+A per-user, durable selection of which characters the future scheduled aggregation job should poll. Stored in `tracked_characters`; all endpoints are behind `requireAuth` and scoped to the caller.
+
+| Endpoint                                         | Behaviour                                                              |
+| ------------------------------------------------ | ---------------------------------------------------------------------- |
+| `GET /api/profile/wow/tracked-characters`        | Lists the caller's tracked characters, oldest first                    |
+| `POST /api/profile/wow/tracked-characters`       | Body `{ "realmSlug": "...", "characterName": "..." }` — adds one       |
+| `DELETE /api/profile/wow/tracked-characters/:id` | Removes one by row id, only if it belongs to the caller (`404` if not) |
+
+- **No ownership validation on `POST`:** any realm/character-name pair is accepted without checking it against the caller's account summary. Blizzard's character endpoints serve public, armory-style data, so no extra Battle.net call is made to enforce "your own characters only".
+- **`POST` is idempotent:** re-adding an already-tracked character returns `200` with the existing row rather than an error, via a unique index on `(user_id, realm_slug, character_name)`.
+- **Normalization:** `realmSlug` and `characterName` are trimmed and lowercased before storage, so `Thrall` and `thrall` are the same tracked character.
+- **No cap** on how many characters a user may track.
+- Rows are deleted automatically when their user is (`ON DELETE CASCADE`).
+- Only the selection is stored — no character stat data (level/XP/achievements/equipment) is persisted anywhere.
+
 ## Database schema note
 
-The `schema_migration_check` placeholder table (from the initial Postgres setup) has been dropped — real tables (`users`, `battlenet_tokens`) now live in `app/database/schema/index.ts`.
+The `schema_migration_check` placeholder table (from the initial Postgres setup) has been dropped — real tables (`users`, `battlenet_tokens`, `tracked_characters`) now live in `app/database/schema/index.ts`.

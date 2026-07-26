@@ -36,3 +36,23 @@ export const battlenetTokens = pgTable(
   },
   (table) => [uniqueIndex('battlenet_tokens_user_id_idx').on(table.userId)],
 );
+
+export const trackedCharacters = pgTable(
+  'tracked_characters',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    realmSlug: text('realm_slug').notNull(),
+    characterName: text('character_name').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('tracked_characters_user_id_realm_slug_character_name_idx').on(
+      table.userId,
+      table.realmSlug,
+      table.characterName,
+    ),
+  ],
+);
