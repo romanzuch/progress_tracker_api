@@ -138,7 +138,20 @@ export async function runDueSnapshots(): Promise<SnapshotRunSummary> {
       );
       // A renamed, transferred, or deleted character 404s forever. Back it off
       // anyway, or it stays due on every heartbeat.
-      await reschedule(character, false);
+      try {
+        await reschedule(character, false);
+      } catch (rescheduleErr) {
+        // If even the backoff write fails (DB blip, dropped connection), don't
+        // let that abort the whole run — the character just stays due and gets
+        // retried next heartbeat instead of blocking every character after it.
+        logger.error(
+          `[snapshots] ${character.realmSlug}/${character.characterName} reschedule failed: ${
+            rescheduleErr instanceof Error
+              ? rescheduleErr.message
+              : String(rescheduleErr)
+          }`,
+        );
+      }
     }
   }
 

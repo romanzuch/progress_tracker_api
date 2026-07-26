@@ -231,4 +231,32 @@ describe('runDueSnapshots', () => {
     expect(scheduleFor('tracked-gone').pollIntervalMinutes).toBe(60);
     expect(scheduleFor('tracked-ok').pollIntervalMinutes).toBe(30);
   });
+
+  it('keeps the run going when the failure-path reschedule itself rejects', async () => {
+    listDueMock.mockResolvedValue([
+      trackedCharacter({ id: 'tracked-gone', characterName: 'renamed' }),
+      trackedCharacter({ id: 'tracked-ok' }),
+    ]);
+    getCharacterProfileMock.mockRejectedValueOnce(
+      new Error('Request failed with status code 404'),
+    );
+    // The first character's own fetch failure triggers a reschedule attempt
+    // that itself fails (DB blip). That must not abort the loop.
+    updateScheduleMock.mockRejectedValueOnce(new Error('connection terminated'));
+
+    const summary = await runDueSnapshots();
+
+    expect(summary).toEqual({ due: 2, succeeded: 1, failed: 1 });
+    // The second character must still be reached: snapshotted and rescheduled
+    // normally, proving the loop continued past the reschedule failure.
+    expect(createSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(createSnapshotMock).toHaveBeenCalledWith(
+      expect.objectContaining({ characterName: 'sixfootfour' }),
+    );
+    expect(updateScheduleMock).toHaveBeenCalledWith(
+      'tracked-ok',
+      expect.objectContaining({ pollIntervalMinutes: 30 }),
+    );
+    expect(scheduleFor('tracked-ok').pollIntervalMinutes).toBe(30);
+  });
 });
