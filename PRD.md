@@ -42,17 +42,17 @@ Phases below are ordered; each maps to (or will map to) its own Linear ticket an
 
 - First real data-fetching endpoint: `GET /api/profile/wow`, a live authenticated proxy to Battle.net's WoW Account Profile Summary, region/locale aware. No persistence yet. ([CB-88](plans/prds/wow-profile-summary.md))
 
-### Phase 3 — Character detail fetch & tracking selection (next, planned)
+### Phase 3 — Character detail fetch & tracking selection (done)
 
-- Live (non-persisted) character-level detail: profile summary (level, XP, achievement points, spec, etc.), achievements, and equipment, via three new Battle.net Profile API endpoints scoped by realm + character name. Plus a persisted per-user "tracked characters" selection so the scheduled aggregation job (Phase 4) knows which characters to poll. ([wow-character-tracking.md](plans/prds/wow-character-tracking.md))
+- Live (non-persisted) character-level detail: profile summary (level, XP, achievement points, spec, etc.), achievements, and equipment, via three new Battle.net Profile API endpoints scoped by realm + character name. Plus a persisted per-user "tracked characters" selection so the scheduled aggregation job (Phase 4) knows which characters to poll. ([CB-89](plans/prds/wow-character-tracking.md))
 
 ### Phase 4 — Scheduled aggregation job (done)
 
 - A background job that polls every tracked character on an adaptive cadence, using the app-level client-credentials token rather than the Profile API's per-user grant, so it is permanently immune to `needs_reauth` becoming true for any user (see [battlenet-oauth-integration.md](plans/prds/battlenet-oauth-integration.md) Post-implementation note). Persists a snapshot row — typed metrics plus the raw Battle.net payloads — per poll to a new `character_snapshots` table. ([CB-90](plans/prds/scheduled-character-snapshots.md))
 
-### Phase 5 — Historical progress storage & query (planned)
+### Phase 5 — Historical progress storage & query (next, planned)
 
-- Durable storage of per-character snapshots over time (level, quests, items, etc.), plus API endpoints to query history/trends for a character — the data a future frontend would graph.
+- Durable storage already exists as of Phase 4 (`character_snapshots`). This phase adds ownership-scoped API endpoints to query a character's snapshot history/latest snapshot, plus a raw-payload retention/pruning policy. ([character-history-query.md](plans/prds/character-history-query.md))
 
 ### Phase 6 — Multi-character / account-wide views (planned)
 

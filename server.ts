@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { createApp } from './app/config/app.conf.js';
 import { connect } from './app/database/index.js';
 import { startSnapshotScheduler } from './app/services/SnapshotScheduler.service.js';
+import { startSnapshotRetentionScheduler } from './app/services/SnapshotRetentionScheduler.service.js';
 import { logger } from './app/utils/Logger.util.js';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -15,6 +16,7 @@ async function main(): Promise<void> {
   });
 
   startSnapshotScheduler();
+  startSnapshotRetentionScheduler();
 }
 
 main().catch((err) => {

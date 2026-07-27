@@ -43,6 +43,13 @@
       "when": 1785081712536,
       "tag": "0005_large_toxin",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785174567868,
+      "tag": "0006_military_cassandra_nova",
+      "breakpoints": true
     }
   ]
 }
