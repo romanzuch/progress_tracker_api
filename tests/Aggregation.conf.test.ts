@@ -21,6 +21,9 @@ describe('aggregationConfig', () => {
       snapshotJobHeartbeatMinutes: 5,
       snapshotActiveIntervalMinutes: 30,
       snapshotIdleIntervalMinutes: 360,
+      snapshotRawPayloadRetentionDays: 90,
+      snapshotRetentionJobEnabled: true,
+      snapshotRetentionJobHeartbeatHours: 24,
     });
   });
 
@@ -29,6 +32,9 @@ describe('aggregationConfig', () => {
     vi.stubEnv('SNAPSHOT_JOB_HEARTBEAT_MINUTES', '2');
     vi.stubEnv('SNAPSHOT_ACTIVE_INTERVAL_MINUTES', '15');
     vi.stubEnv('SNAPSHOT_IDLE_INTERVAL_MINUTES', '120');
+    vi.stubEnv('SNAPSHOT_RAW_PAYLOAD_RETENTION_DAYS', '30');
+    vi.stubEnv('SNAPSHOT_RETENTION_JOB_ENABLED', 'false');
+    vi.stubEnv('SNAPSHOT_RETENTION_JOB_HEARTBEAT_HOURS', '6');
 
     const { aggregationConfig } = await loadConfig();
 
@@ -37,6 +43,9 @@ describe('aggregationConfig', () => {
       snapshotJobHeartbeatMinutes: 2,
       snapshotActiveIntervalMinutes: 15,
       snapshotIdleIntervalMinutes: 120,
+      snapshotRawPayloadRetentionDays: 30,
+      snapshotRetentionJobEnabled: false,
+      snapshotRetentionJobHeartbeatHours: 6,
     });
   });
 
@@ -61,6 +70,22 @@ describe('aggregationConfig', () => {
 
     await expect(loadConfig()).rejects.toThrow(
       /Invalid aggregation configuration/,
+    );
+  });
+
+  it('rejects a non-numeric retention window', async () => {
+    vi.stubEnv('SNAPSHOT_RAW_PAYLOAD_RETENTION_DAYS', 'forever');
+
+    await expect(loadConfig()).rejects.toThrow(
+      /Invalid aggregation configuration/,
+    );
+  });
+
+  it('rejects a non-boolean retention job enabled flag', async () => {
+    vi.stubEnv('SNAPSHOT_RETENTION_JOB_ENABLED', 'maybe');
+
+    await expect(loadConfig()).rejects.toThrow(
+      /SNAPSHOT_RETENTION_JOB_ENABLED/,
     );
   });
 });

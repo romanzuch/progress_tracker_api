@@ -167,7 +167,39 @@ A background job that polls every tracked character on an adaptive schedule and 
 - Config is validated at import time (`app/config/aggregation.conf.ts`) and requires `heartbeat <= active <= idle` — an invalid combination fails fast rather than silently capping the real polling resolution.
 - **`npm run job:snapshot`** runs one due-characters pass immediately and exits, regardless of `SNAPSHOT_JOB_ENABLED` — useful for local verification, or for driving the job from an external scheduler instead of the in-process heartbeat.
 - **Single-instance only:** the in-flight guard that stops a heartbeat tick from overlapping a slow run is per-process. Running more than one API instance with the job enabled has each instance poll the same due characters independently — there is no row-claiming or locking between instances.
-- No endpoint reads snapshots yet — history and trend queries are a later phase.
+- History and trend queries against these snapshots are covered below.
+
+## Character snapshot history
+
+Read-only, ownership-scoped access to the snapshot history `character_snapshots` has been accumulating, plus an automatic policy for keeping storage cost bounded. Both endpoints are behind `requireAuth`.
+
+| Endpoint                                                                        | Behaviour                                                                                          |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `GET /api/profile/wow/character/:realmSlug/:characterName/history`             | Typed-metric snapshot history for the caller's own data, filterable and paginated (see below)      |
+| `GET /api/profile/wow/character/:realmSlug/:characterName/history/latest`      | Just the most recent snapshot; `404` if none exists                                                |
+
+- **Ownership-scoped, unlike the live `/api/profile/wow/character/*` passthrough endpoints above:** results are filtered by `character_snapshots.user_id = req.user.id`, not merely by realm/character-name. A snapshot is data the app collected on a specific user's behalf, so it's never returned to a different caller, even for the same realm/character-name pair. This scoping is independent of `tracked_characters` — history survives a character being untracked and re-tracked.
+- **Query params on `history`:** `from` / `to` (optional, ISO-8601, filters on `captured_at`) and `limit` (optional, default `100`, max `1000` — values above the max are clamped rather than rejected). Results are ordered ascending by `captured_at` (oldest first), the natural order for graphing a trend.
+- **Typed metrics only, never the raw payloads.** Both endpoints return `level`, `experience`, `achievementPoints`, `achievementsCompleted`, `averageItemLevel`, `equippedItemLevel`, `lastLoginAt`, `capturedAt`, and `payloadHash` — the three raw Battle.net `jsonb` payloads (`profile_payload`, `achievements_payload`, `equipment_payload`) are never sent over HTTP by any endpoint in this API.
+- **`history` on a realm/character-name the caller has no snapshots for returns `200` with an empty array**, not a `404` — there's no ownership ambiguity to signal, since an unrelated character simply has no matching rows for that `user_id`.
+
+### Raw payload retention
+
+Because the raw payloads are the dominant storage cost (see the scheduled-snapshots section above) but are never read back over HTTP, a scheduled job prunes them once they're old enough to be unlikely to matter:
+
+- After `SNAPSHOT_RAW_PAYLOAD_RETENTION_DAYS` (default 90) days, the three raw `jsonb` payload columns on a snapshot row are set to `NULL`. **The row itself and every typed metric column are kept forever** — nothing is deleted, and the history endpoints above are unaffected, since they never select the raw payload columns in the first place.
+- **This is irreversible.** Once a raw payload is pruned, that snapshot's original Battle.net response is gone for good; only its extracted typed metrics remain. There's no way to recover it later even if a new metric worth extracting is identified.
+- **On by default** (`SNAPSHOT_RETENTION_JOB_ENABLED=true`), unlike the snapshot-polling job — pruning makes no external Battle.net calls and only trims local data, so there's no reason to require an opt-in.
+- Runs on its own heartbeat, independent of the snapshot-polling heartbeat.
+
+| Variable                              | Default | Description                                              |
+| -------------------------------------- | ------- | ---------------------------------------------------------- |
+| `SNAPSHOT_RAW_PAYLOAD_RETENTION_DAYS` | `90`    | Age (days) after which a snapshot's raw payloads are pruned |
+| `SNAPSHOT_RETENTION_JOB_ENABLED`      | `true`  | Start the in-process retention heartbeat on server boot     |
+| `SNAPSHOT_RETENTION_JOB_HEARTBEAT_HOURS` | `24` | How often to look for prunable snapshots                   |
+
+- **`npm run job:prune-snapshots`** runs one retention pass immediately and exits, regardless of `SNAPSHOT_RETENTION_JOB_ENABLED` — useful for local verification or for driving retention from an external scheduler instead of the in-process heartbeat.
+- Re-running the job against already-pruned rows is a cheap no-op — a row whose payloads are already `NULL` isn't rewritten.
 
 ## Database schema note
 

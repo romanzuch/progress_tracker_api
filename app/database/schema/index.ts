@@ -90,9 +90,12 @@ export const characterSnapshots = pgTable(
     averageItemLevel: integer('average_item_level'),
     equippedItemLevel: integer('equipped_item_level'),
     lastLoginAt: timestamp('last_login_at'),
-    profilePayload: jsonb('profile_payload').notNull(),
-    achievementsPayload: jsonb('achievements_payload').notNull(),
-    equipmentPayload: jsonb('equipment_payload').notNull(),
+    // Nullable, not notNull: the retention job (CB-91) nulls these out for
+    // snapshots older than the configured window, keeping the row and its
+    // typed metrics but dropping the raw payloads to bound storage cost.
+    profilePayload: jsonb('profile_payload'),
+    achievementsPayload: jsonb('achievements_payload'),
+    equipmentPayload: jsonb('equipment_payload'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [

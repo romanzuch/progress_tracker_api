@@ -15,7 +15,8 @@
     "db:migrate:generate": "drizzle-kit generate",
     "db:migrate:up": "drizzle-kit migrate",
     "db:migrate:down": "tsx scripts/db-migrate-down.ts",
-    "job:snapshot": "tsx scripts/run-snapshot-job.ts"
+    "job:snapshot": "tsx scripts/run-snapshot-job.ts",
+    "job:prune-snapshots": "tsx scripts/run-snapshot-retention-job.ts"
   },
   "keywords": [],
   "author": "",

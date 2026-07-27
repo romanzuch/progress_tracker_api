@@ -1,20 +1,27 @@
 import { z } from 'zod';
 import { aggregationKeys } from './aggregation.keys.js';
 
-const booleanFromString = z
-  .enum(['true', 'false'], {
-    message: 'SNAPSHOT_JOB_ENABLED must be "true" or "false"',
-  })
-  .transform((value) => value === 'true');
+const booleanFromString = (varName: string) =>
+  z
+    .enum(['true', 'false'], {
+      message: `${varName} must be "true" or "false"`,
+    })
+    .transform((value) => value === 'true');
 
 const positiveMinutes = z.coerce.number().int().positive();
+const positiveInt = z.coerce.number().int().positive();
 
 const aggregationConfigSchema = z
   .object({
-    snapshotJobEnabled: booleanFromString,
+    snapshotJobEnabled: booleanFromString('SNAPSHOT_JOB_ENABLED'),
     snapshotJobHeartbeatMinutes: positiveMinutes,
     snapshotActiveIntervalMinutes: positiveMinutes,
     snapshotIdleIntervalMinutes: positiveMinutes,
+    snapshotRawPayloadRetentionDays: positiveInt,
+    snapshotRetentionJobEnabled: booleanFromString(
+      'SNAPSHOT_RETENTION_JOB_ENABLED',
+    ),
+    snapshotRetentionJobHeartbeatHours: positiveInt,
   })
   // A heartbeat longer than the active interval would silently cap the real
   // polling resolution, and an active interval above the idle floor would make
