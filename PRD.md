@@ -2,7 +2,7 @@
 
 ## Status
 
-Living document — reflects current scope and roadmap as of 2026-07-26. Individual features are specced in their own PRDs under [plans/prds/](plans/prds/); this document is the umbrella product view.
+Living document — reflects current scope and roadmap as of 2026-07-29. Individual features are specced in their own PRDs under [plans/prds/](plans/prds/); this document is the umbrella product view.
 
 ## Summary
 
@@ -50,13 +50,13 @@ Phases below are ordered; each maps to (or will map to) its own Linear ticket an
 
 - A background job that polls every tracked character on an adaptive cadence, using the app-level client-credentials token rather than the Profile API's per-user grant, so it is permanently immune to `needs_reauth` becoming true for any user (see [battlenet-oauth-integration.md](plans/prds/battlenet-oauth-integration.md) Post-implementation note). Persists a snapshot row — typed metrics plus the raw Battle.net payloads — per poll to a new `character_snapshots` table. ([CB-90](plans/prds/scheduled-character-snapshots.md))
 
-### Phase 5 — Historical progress storage & query (next, planned)
+### Phase 5 — Historical progress storage & query (done)
 
-- Durable storage already exists as of Phase 4 (`character_snapshots`). This phase adds ownership-scoped API endpoints to query a character's snapshot history/latest snapshot, plus a raw-payload retention/pruning policy. ([character-history-query.md](plans/prds/character-history-query.md))
+- Durable storage already exists as of Phase 4 (`character_snapshots`). This phase adds ownership-scoped API endpoints to query a character's snapshot history/latest snapshot, plus a raw-payload retention/pruning policy. ([CB-91](plans/prds/character-history-query.md))
 
-### Phase 6 — Multi-character / account-wide views (planned)
+### Phase 6 — Multi-character / account-wide views (done)
 
-- Endpoints that aggregate across all of a user's characters and realms, not just a single character at a time.
+- A read-only, ownership-scoped endpoint that returns every tracked character's latest snapshot in one response — a per-character rollup, not a single-character view. No server-computed account-level aggregates (see PRD's Non-Goals). ([CB-92](plans/prds/account-character-overview.md))
 
 ## Open Questions
 

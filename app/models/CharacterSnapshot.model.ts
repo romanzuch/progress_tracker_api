@@ -131,6 +131,32 @@ export const CharacterSnapshotModel = {
       .limit(limit);
   },
 
+  // One row per distinct (realmSlug, characterName) the user has ever
+  // snapshotted, each the most recent by capturedAt — the fan-out query
+  // behind the account-wide overview endpoint.
+  async findLatestForUser(
+    userId: string,
+  ): Promise<
+    (CharacterSnapshotSummary & { realmSlug: string; characterName: string })[]
+  > {
+    return getDb()
+      .selectDistinctOn(
+        [characterSnapshots.realmSlug, characterSnapshots.characterName],
+        {
+          ...summaryColumns,
+          realmSlug: characterSnapshots.realmSlug,
+          characterName: characterSnapshots.characterName,
+        },
+      )
+      .from(characterSnapshots)
+      .where(eq(characterSnapshots.userId, userId))
+      .orderBy(
+        characterSnapshots.realmSlug,
+        characterSnapshots.characterName,
+        desc(characterSnapshots.capturedAt),
+      );
+  },
+
   async findLatest(identity: {
     userId: string;
     realmSlug: string;

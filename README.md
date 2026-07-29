@@ -201,6 +201,41 @@ Because the raw payloads are the dominant storage cost (see the scheduled-snapsh
 - **`npm run job:prune-snapshots`** runs one retention pass immediately and exits, regardless of `SNAPSHOT_RETENTION_JOB_ENABLED` — useful for local verification or for driving retention from an external scheduler instead of the in-process heartbeat.
 - Re-running the job against already-pruned rows is a cheap no-op — a row whose payloads are already `NULL` isn't rewritten.
 
+## Account-wide character overview
+
+| Endpoint                          | Behaviour                                                                              |
+| ---------------------------------- | ----------------------------------------------------------------------------------------- |
+| `GET /api/profile/wow/characters` | One entry per tracked character, each with its latest snapshot (or `null`) — see below |
+
+- **A fan-out, not a new data source:** behind `requireAuth`, merges the caller's `tracked_characters` list with the latest snapshot per `(realmSlug, characterName)` the caller has ever had snapshotted. Read-only — no live Battle.net calls.
+- Response shape:
+
+  ```json
+  [
+    {
+      "id": "tracked_characters.id",
+      "realmSlug": "...",
+      "characterName": "...",
+      "latestSnapshot": {
+        "id": "...",
+        "capturedAt": "...",
+        "payloadHash": "...",
+        "level": 80,
+        "experience": 0,
+        "achievementPoints": 0,
+        "achievementsCompleted": 0,
+        "averageItemLevel": 0,
+        "equippedItemLevel": 0,
+        "lastLoginAt": "..."
+      }
+    }
+  ]
+  ```
+
+- **Every tracked character appears, even one never polled yet** — `latestSnapshot` is `null` in that case, distinguishing "tracked but pending first poll" from "not tracked at all" without a second request.
+- **`200` with an empty array for a caller with zero tracked characters**, not `404` — same "no ambiguity to signal" reasoning as the history endpoints above.
+- No pagination, no realm filtering, and no server-computed account-level aggregates (total achievement points, highest item level, etc.) — a raw per-character rollup only, consistent with every other read endpoint's "typed metrics, never raw payloads" scoping.
+
 ## Database schema note
 
 The `schema_migration_check` placeholder table (from the initial Postgres setup) has been dropped — real tables (`users`, `battlenet_tokens`, `tracked_characters`) now live in `app/database/schema/index.ts`.

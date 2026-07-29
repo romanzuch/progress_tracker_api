@@ -24,17 +24,25 @@ vi.mock('drizzle-orm', async (importOriginal) => {
   };
 });
 
-const { CharacterSnapshotModel } = await import(
-  '../app/models/CharacterSnapshot.model.js'
-);
+const { CharacterSnapshotModel } =
+  await import('../app/models/CharacterSnapshot.model.js');
 
 // A chainable stand-in for drizzle's query builder: every non-terminal
 // method returns the same chain object, and the two possible terminal calls
 // (`limit` for selects, `returning` for insert/update) resolve to whatever
 // the test configures.
-function createChain(terminalValue: unknown): Record<string, ReturnType<typeof vi.fn>> {
+function createChain(
+  terminalValue: unknown,
+): Record<string, ReturnType<typeof vi.fn>> {
   const chain: Record<string, ReturnType<typeof vi.fn>> = {};
-  for (const method of ['select', 'from', 'where', 'orderBy', 'update', 'set']) {
+  for (const method of [
+    'select',
+    'from',
+    'where',
+    'orderBy',
+    'update',
+    'set',
+  ]) {
     chain[method] = vi.fn().mockReturnValue(chain);
   }
   chain.limit = vi.fn().mockReturnValue(terminalValue);
@@ -74,10 +82,7 @@ describe('CharacterSnapshotModel.listHistory', () => {
     await CharacterSnapshotModel.listHistory({ ...IDENTITY, limit: 100 });
 
     expect(eq).toHaveBeenCalledWith(characterSnapshots.userId, 'user-1');
-    expect(eq).toHaveBeenCalledWith(
-      characterSnapshots.realmSlug,
-      'dun-morogh',
-    );
+    expect(eq).toHaveBeenCalledWith(characterSnapshots.realmSlug, 'dun-morogh');
     expect(eq).toHaveBeenCalledWith(
       characterSnapshots.characterName,
       'sixfootfour',
@@ -152,6 +157,73 @@ describe('CharacterSnapshotModel.findLatest', () => {
     const result = await CharacterSnapshotModel.findLatest(IDENTITY);
 
     expect(result).toBeUndefined();
+  });
+});
+
+describe('CharacterSnapshotModel.findLatestForUser', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // orderBy is the terminal call here (no .limit()) — selectDistinctOn
+  // yields exactly one row per group, ordered so the most recent by
+  // capturedAt within each group comes first.
+  function createDistinctOnChain(
+    terminalValue: unknown,
+  ): Record<string, ReturnType<typeof vi.fn>> {
+    const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+    for (const method of ['selectDistinctOn', 'from', 'where']) {
+      chain[method] = vi.fn().mockReturnValue(chain);
+    }
+    chain.orderBy = vi.fn().mockReturnValue(terminalValue);
+    return chain;
+  }
+
+  it('selects only typed metric columns plus realmSlug/characterName, never the raw jsonb payloads', async () => {
+    const chain = createDistinctOnChain([]);
+    getDbMock.mockReturnValue(chain);
+
+    await CharacterSnapshotModel.findLatestForUser('user-1');
+
+    const [onColumns, fields] = chain.selectDistinctOn.mock.calls[0] as [
+      unknown[],
+      Record<string, unknown>,
+    ];
+    expect(onColumns).toEqual([
+      characterSnapshots.realmSlug,
+      characterSnapshots.characterName,
+    ]);
+    expect(fields).not.toHaveProperty('profilePayload');
+    expect(fields).not.toHaveProperty('achievementsPayload');
+    expect(fields).not.toHaveProperty('equipmentPayload');
+    expect(fields.id).toBe(characterSnapshots.id);
+    expect(fields.realmSlug).toBe(characterSnapshots.realmSlug);
+    expect(fields.characterName).toBe(characterSnapshots.characterName);
+  });
+
+  it('scopes strictly to the given user', async () => {
+    const chain = createDistinctOnChain([]);
+    getDbMock.mockReturnValue(chain);
+
+    await CharacterSnapshotModel.findLatestForUser('user-1');
+
+    expect(eq).toHaveBeenCalledWith(characterSnapshots.userId, 'user-1');
+  });
+
+  it('orders by realm/character then most-recent-first so DISTINCT ON keeps the latest row per character', async () => {
+    const rows = [{ id: 'a' }, { id: 'b' }];
+    const chain = createDistinctOnChain(rows);
+    getDbMock.mockReturnValue(chain);
+
+    const result = await CharacterSnapshotModel.findLatestForUser('user-1');
+
+    expect(chain.orderBy).toHaveBeenCalledWith(
+      characterSnapshots.realmSlug,
+      characterSnapshots.characterName,
+      expect.anything(),
+    );
+    expect(desc).toHaveBeenCalledWith(characterSnapshots.capturedAt);
+    expect(result).toBe(rows);
   });
 });
 
