@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { CharacterHistoryController } from '../controllers/CharacterHistory.controller.js';
+import { CharacterOverviewController } from '../controllers/CharacterOverview.controller.js';
 import { ProfileController } from '../controllers/Profile.controller.js';
 import { TrackedCharacterController } from '../controllers/TrackedCharacter.controller.js';
 import { requireAuth } from '../middleware/RequireAuth.middleware.js';
@@ -22,6 +23,12 @@ profileRoutes.delete(
   '/wow/tracked-characters/:id',
   requireAuth,
   TrackedCharacterController.remove,
+);
+
+profileRoutes.get(
+  '/wow/characters',
+  requireAuth,
+  CharacterOverviewController.list,
 );
 
 profileRoutes.get(
